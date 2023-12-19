@@ -28,22 +28,21 @@ if [ -z "$libclang_rt_path" ]; then
     exit 1
 fi
 
-echo "export LIBCLANG_RT_PATH='$libclang_rt_path'
-export LD_LIBRARY_PATH=$(dirname $libclang_rt_path)
 export ASAN_OPTIONS='detect_leaks=0'
-export CC=$RAW_CC
-export CXX=$RAW_CXX
+export CC="$RAW_CC"
+export CXX="$RAW_CXX"
 export CFLAGS=""
 export CXXFLAGS=""
-" > $td/env
-
-source $td/env
+# Allow C++ extensions to throw exceptions.
+# ASAN must be able to hook libstdc++.
+export LDFLAGS="-lstdc++"
 
 echo "Using:"
 echo "  CC=$CC"
 echo "  CXX=$CXX"
 echo "  CFLAGS=$CFLAGS"
 echo "  CXXFLAGS=$CXXFLAGS"
+echo "  LDFLAGS=$LDFLAGS"
 
 # Set up ccache.
 if $has_ccache; then
@@ -53,14 +52,14 @@ if $has_ccache; then
 fi
 
 src_dir="$td/cpython-src"
-build_dir="$td/build"
-install_dir="$td/install"
+build_dir="$td/build-msan"
+install_dir="$td/install-msan"
 mkdir -p $build_dir $install_dir
 
 cd $build_dir
 echo "CONFIGURING"
 echo "-----------"
-"$src_dir/configure" --prefix=$install_dir --with-address-sanitizer
+"$src_dir/configure" --prefix=$install_dir --with-memory-sanitizer
 
 echo "BUILDING"
 echo "--------"
@@ -69,3 +68,23 @@ make -j
 echo "INSTALLING"
 echo "----------"
 make install
+
+echo "CREATE VENV"
+echo "-----------"
+"$install_dir/bin/python3" -m venv $td/venv-msan
+
+echo "WRITE ENV FILE"
+echo "--------------"
+echo "export LIBCLANG_RT_PATH='$libclang_rt_path'
+export ASAN_OPTIONS='detect_leaks=0'
+export CC=$RAW_CC
+export CXX=$RAW_CXX
+source $td/venv-msan/bin/activate
+" > $td/env.msan
+echo "Run to activate:"
+echo "  source $td/env"
+
+echo "ADDING SOME PIP DEPS"
+echo "--------------------"
+source $td/env.msan
+python -m pip install numpy PyYAML pybind11 nanobind
