@@ -66,3 +66,6 @@ echo "BUILDING"
 echo "--------"
 make -j
 
+echo "INSTALLING"
+echo "----------"
+make install
